@@ -1,0 +1,267 @@
+<!-- 籃球戰術板應用程式 (Basketball Tactics Board App) -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 設定 viewport 確保在平板和行動裝置上的響應式顯示和觸控操作 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>籃球戰術板</title>
+    <!-- 載入 Tailwind CSS 用於美化與響應式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 使用 Inter 字體 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* 籃球場容器：保持長寬比並使其響應式 */
+        .court-container {
+            position: relative;
+            /* 保持籃球場的長寬比 (例如 94 ft x 50 ft) */
+            aspect-ratio: 94 / 50;
+            width: 100%;
+            max-width: 1200px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #EAC99D; /* 模擬木地板顏色 */
+        }
+
+        /* 可拖曳元素 (球員和籃球) 樣式 */
+        .draggable {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            cursor: grab; /* 拖曳游標 */
+            user-select: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            transition: transform 0.1s ease-out;
+            z-index: 10;
+            touch-action: none; /* 關鍵：防止觸控拖曳時觸發瀏覽器預設的滑動行為 */
+        }
+
+        .draggable.dragging {
+            cursor: grabbing;
+            opacity: 0.8;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+        }
+
+        .player {
+            background-color: #3B82F6; /* 藍色球員圖示 */
+            border: 2px solid #1E40AF;
+            font-size: 16px;
+        }
+        
+        /* 新增：編輯背號時的高亮樣式 */
+        .player[contenteditable]:focus {
+            outline: 3px solid #FFD700; /* 編輯時高亮 */
+            outline-offset: 1px;
+            z-index: 11; /* 確保編輯時在最上層 */
+        }
+
+        .basketball {
+            background-color: #FF8800; /* 橘色籃球圖示 */
+            border: 2px solid #E54E00;
+            /* 修正: 放大籃球圖示使其與圓圈大小一致 */
+            font-size: 32px; 
+        }
+
+        /* 嵌入式 SVG 籃球場背景樣式 */
+        .court-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="court-container" id="courtContainer">
+    <!-- SVG 籃球場背景 - 滿足要求：使用嵌入式 SVG 來繪製球場線條 -->
+    <svg class="court-svg" viewBox="0 0 940 500" preserveAspectRatio="none">
+        <!-- 中線 -->
+        <line x1="470" y1="0" x2="470" y2="500" stroke="white" stroke-width="2"/>
+
+        <!-- 中圈 -->
+        <circle cx="470" cy="250" r="60" fill="none" stroke="white" stroke-width="2"/>
+        <circle cx="470" cy="250" r="10" fill="white"/>
+
+        <!-- 三分線 - 左側 (弧線和邊線) -->
+        <path d="M 0 30 L 140 30 A 237.5 237.5 0 0 1 140 470 L 0 470" fill="none" stroke="white" stroke-width="2"/>
+
+        <!-- 三分線 - 右側 (弧線和邊線) -->
+        <path d="M 940 30 L 800 30 A 237.5 237.5 0 0 0 800 470 L 940 470" fill="none" stroke="white" stroke-width="2"/>
+
+        <!-- 限制區 (Key) - 左側 -->
+        <rect x="0" y="170" width="190" height="160" fill="none" stroke="white" stroke-width="2"/>
+        
+        <!-- 罰球圈 - 左側 (完整圓圈) -->
+        <circle cx="190" cy="250" r="60" fill="none" stroke="white" stroke-width="2"/>
+
+        <!-- 籃筐和籃板 - 左側 -->
+        <line x1="40" y1="220" x2="40" y2="280" stroke="black" stroke-width="6"/> <!-- 籃板 -->
+        <circle cx="48" cy="250" r="8" fill="none" stroke="red" stroke-width="4"/> <!-- 籃筐 -->
+
+        <!-- 限制區 (Key) - 右側 -->
+        <rect x="750" y="170" width="190" height="160" fill="none" stroke="white" stroke-width="2"/>
+        
+        <!-- 罰球圈 - 右側 (完整圓圈) -->
+        <circle cx="750" cy="250" r="60" fill="none" stroke="white" stroke-width="2"/>
+
+        <!-- 籃筐和籃板 - 右側 -->
+        <line x1="900" y1="220" x2="900" y2="280" stroke="black" stroke-width="6"/> <!-- 籃板 -->
+        <circle cx="892" cy="250" r="8" fill="none" stroke="red" stroke-width="4"/> <!-- 籃筐 -->
+    </svg>
+
+    <!-- 可拖曳的球員及籃球圖示 (使用絕對定位在 SVG 上方) -->
+
+    <!-- 球員 1 號 - 現在可編輯 -->
+    <div class="draggable player" id="player1" style="left: 10%; top: 50%;" contenteditable="true">1</div>
+    <!-- 球員 5 號 - 現在可編輯 -->
+    <div class="draggable player" id="player5" style="left: 25%; top: 20%;" contenteditable="true">5</div>
+    <!-- 球員 10 號 - 現在可編輯 -->
+    <div class="draggable player" id="player10" style="left: 25%; top: 80%;" contenteditable="true">10</div>
+    <!-- 球員 15 號 - 現在可編輯 -->
+    <div class="draggable player" id="player15" style="left: 40%; top: 35%;" contenteditable="true">15</div>
+    <!-- 球員 20 號 - 現在可編輯 -->
+    <div class="draggable player" id="player20" style="left: 40%; top: 65%;" contenteditable="true">20</div>
+
+    <!-- 籃球 (Ball) -->
+    <div class="draggable basketball" id="basketball" style="left: 15%; top: 40%;">
+        🏀
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const court = document.getElementById('courtContainer');
+        const draggables = document.querySelectorAll('.draggable');
+        let activeItem = null;
+        let xOffset = 0;
+        let yOffset = 0;
+        const itemSize = 40; // 圖示的固定尺寸 (40px)
+
+        /**
+         * 處理拖曳開始事件 (滑鼠按下或觸控開始)
+         * @param {Event} e - 事件對象
+         */
+        function dragStart(e) {
+            // 判斷是觸控事件還是滑鼠事件
+            const isTouchEvent = e.type.startsWith('touch');
+            // 如果是觸控事件，只處理單點觸控
+            if (isTouchEvent && e.touches.length > 1) return;
+            
+            // 阻止預設行為，防止移動整個頁面
+            // 注意：對於 contenteditable 元素，單擊/單觸會啟動編輯，但長按或拖曳仍應移動。
+            if (isTouchEvent) {
+                e.preventDefault();
+            }
+            
+            // 取得事件發生位置 (考慮觸控第一個點)
+            const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+            const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
+
+            // 設置當前活動項目
+            activeItem = e.currentTarget;
+            activeItem.classList.add('dragging');
+
+            // 取得項目的邊界矩形
+            const itemRect = activeItem.getBoundingClientRect();
+
+            // 計算點擊位置與項目左上角的偏移量 (用於平滑拖曳)
+            xOffset = clientX - itemRect.left;
+            yOffset = clientY - itemRect.top;
+        }
+
+        /**
+         * 處理拖曳移動事件
+         * @param {Event} e - 事件對象
+         */
+        function drag(e) {
+            if (activeItem) {
+                // 阻止預設行為，尤其重要，防止觸控時滾動頁面
+                e.preventDefault();
+
+                // 取得事件發生位置 (考慮觸控第一個點)
+                const isTouchEvent = e.type.startsWith('touch');
+                // 確保在移動時，觸控點仍然存在
+                if (isTouchEvent && e.touches.length === 0) return;
+                
+                const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+                const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
+                
+                // 取得容器的邊界矩形
+                const courtRect = court.getBoundingClientRect();
+                
+                // 計算項目在容器內的新位置 (像素)
+                let newLeftPx = clientX - courtRect.left - xOffset;
+                let newTopPx = clientY - courtRect.top - yOffset;
+                
+                // 邊界檢查 (防止項目移出戰術板)
+                newLeftPx = Math.max(0, Math.min(newLeftPx, courtRect.width - itemSize));
+                newTopPx = Math.max(0, Math.min(newTopPx, courtRect.height - itemSize));
+
+                // 更新項目的位置
+                activeItem.style.left = `${newLeftPx}px`;
+                activeItem.style.top = `${newTopPx}px`;
+            }
+        }
+
+        /**
+         * 處理拖曳結束事件
+         */
+        function dragEnd() {
+            if (activeItem) {
+                activeItem.classList.remove('dragging');
+                activeItem = null;
+                xOffset = 0;
+                yOffset = 0;
+            }
+        }
+
+        // 為每個可拖曳元素添加事件監聽器
+        draggables.forEach(item => {
+            // 觸控事件 (適用於平板/手機)
+            item.addEventListener('touchstart', dragStart, false);
+            // 滑鼠事件 (適用於桌面)
+            item.addEventListener('mousedown', dragStart, false);
+
+            // 阻止在拖曳開始時自動獲得焦點，這有助於區分拖曳和編輯
+            item.addEventListener('focus', (e) => {
+                // 如果是球員 (可編輯)，在獲得焦點時，確保拖曳狀態是清除的
+                if (item.classList.contains('player')) {
+                    dragEnd();
+                }
+            });
+        });
+
+        // 在文件上添加移動和結束監聽器 (確保即使快速移動也能捕獲)
+        // 觸控移動和結束
+        document.addEventListener('touchmove', drag, false);
+        document.addEventListener('touchend', dragEnd, false);
+        
+        // 滑鼠移動和結束
+        document.addEventListener('mousemove', drag, false);
+        document.addEventListener('mouseup', dragEnd, false);
+
+        console.log("籃球戰術板應用程式已載入並準備就緒，球員背號現在可編輯。");
+    });
+</script>
+
+</body>
+</html>
